@@ -3,6 +3,148 @@ class Coordinates2D {
         this.x = x;
         this.y = y;
     }
+
+    static fromString(coordinateString) {
+        const [x, y] = coordinateString.split(',').map(value => parseInt(value));
+        return new Coordinates2D(x, y);
+    }
+
+    toString() {
+        return `${this.x},${this.y}`;
+    }
+
+    get surroundingCoordinates() {
+        return [
+            [this.x - 1, this.y - 1],
+            [this.x - 1, this.y],
+            [this.x - 1, this.y + 1],
+            [this.x, this.y - 1],
+            [this.x, this.y + 1],
+            [this.x + 1, this.y - 1],
+            [this.x + 1, this.y],
+            [this.x + 1, this.y + 1],
+        ].map(coordinates => new Coordinates2D(...coordinates));
+    }
+
+    equals(coordinates_b) {
+        return this.x === coordinates_b.x && this.y === coordinates_b.y;
+    }
+}
+
+const GameState = {
+    PAUSE: 0,
+    PLAY: 1
+}
+
+class GameOfLife {
+    constructor(initial_live_cells, grid, generation_time = 1000) {
+        this.initial_live_cells = {...initial_live_cells};
+        this.live_cells = initial_live_cells;
+        this.game_state = GameState.PAUSE;
+        this.generation_time = generation_time;
+        this.calculate_next_state_interval_id = null;
+        this._canvas = null;
+        this.grid = grid;
+    }
+
+    set canvas(canvas_element) {
+        this._canvas = canvas_element;
+        this.render();
+    }
+
+    set generationTime(value) {
+        this.generation_time = value;
+    }
+
+    start() {
+        if (this.game_state === GameState.PLAY) return;
+
+        this.game_state = GameState.PLAY;
+        function _steps(game_of_life) {
+            return () => {
+                game_of_life.calculateNextState();
+                game_of_life.render();
+            }
+        }
+
+        this.calculate_next_state_interval_id = setInterval(() => {
+            this.calculateNextState();
+            this.render();
+        },
+        // _steps(this),
+        this.generation_time
+        );
+    }
+    pause() {
+        if (this.game_state === GameState.PAUSE) return;
+
+        this.game_state = GameState.PAUSE;
+        clearInterval(this.calculate_next_state_interval_id);
+        this.calculate_next_state_interval_id = null;
+    }
+    reset() {
+        if (this.game_state === GameState.PLAY) {
+            this.pause();
+        }
+        
+        this.live_cells = {...this.initial_live_cells};
+    }
+    
+    render() {
+        this._canvas.clear();
+        this._canvas.fill_from_buffer(
+            Object.values(this.live_cells)
+        );
+    }
+    
+    willLive(coordinates, countLivingNeighbors) {
+        if (coordinates.toString() in this.live_cells) {
+            return countLivingNeighbors > 1 && countLivingNeighbors < 4;
+        }
+
+        return countLivingNeighbors === 3;
+    }
+    
+    calculateNextState() {
+        const relevant_coordinates = Object.values(this.live_cells).map(coordinate => coordinate.surroundingCoordinates).reduce((a, b) => a.concat(b), []);
+        const next_generation_live_cells = {};
+
+        // Count living neighbors
+        const living_neighbor_count = {};
+        for (let coordinate of relevant_coordinates) {
+            let valid = this.grid.areCoordinatesValid(coordinate);
+            if (!valid) {
+                continue;
+            }
+            const coordinate_key = coordinate.toString();
+            if (!(coordinate_key in living_neighbor_count)) living_neighbor_count[coordinate_key] = 0;
+            living_neighbor_count[coordinate_key] += 1;
+        }
+
+        // Create next state of this.live_cells
+        for (const coordinate_key in living_neighbor_count) {
+            const living_neighbors = living_neighbor_count[coordinate_key];
+            if (this.willLive(coordinate_key, living_neighbors)) {
+                next_generation_live_cells[coordinate_key] = Coordinates2D.fromString(coordinate_key);
+            }
+        }
+        this.live_cells = next_generation_live_cells;
+    }
+
+    
+}
+
+class Grid {
+    constructor(rows, cols, cell_size) {
+        this.rows = rows;
+        this.columns = cols;
+        this.cell_size = cell_size;
+    }
+
+    areCoordinatesValid(coordinates) {
+        let valid = (coordinates.x >= 0) && (coordinates.y >= 0) && (coordinates.x < this.columns) && (coordinates.y < this.rows);
+        return valid;
+    }
 }
 
 class Canvas2D {
@@ -57,7 +199,6 @@ class Canvas2D {
      * @param {Number} y 
      */
     fill_pixel(x, y) {
-        
         this.canvas_ctx.fillRect(x, y, 1, 1);
     }
 
@@ -81,26 +222,35 @@ class Canvas2D {
 }
 
 function App() {
-    // Setup Canvas2D Element
     let grid_size = 50;
-    let game_of_life_canvas = new Canvas2D(grid_size, grid_size, 1000, 1000, "game_of_life_canvas", document.getElementById("app"));
+    // TODO: Replace cell size with dimensions for a grid to fit the window viewport + controls.
+    // Ensure cells are squares.
+    let cell_size = 20;
+    let grid = new Grid(grid_size, grid_size, cell_size);
+    // Setup Canvas2D Element
+    let game_of_life_canvas = new Canvas2D(
+        grid.rows,
+        grid.columns,
+        grid.cell_size * grid.rows,
+        grid.cell_size * grid.columns,
+        "game_of_life_canvas",
+        document.getElementById("app"),
+    );
     game_of_life_canvas.set_color("#f00");
 
-    // Test Canvas2D Functionality
-    game_of_life_canvas.fill_pixel(10, 10);
-    game_of_life_canvas.fill_from_buffer([
-        new Coordinates2D(1, 1),
-        new Coordinates2D(2, 2),
-        new Coordinates2D(3, 3)
-    ]);
-
-    // Test Canvas2D Animation
-    let count = 0;
-    setInterval(() => {
-        game_of_life_canvas.clear();
-        game_of_life_canvas.fill_pixel(count % grid_size, count % grid_size);
-        count++;
-    }, 250);
+    let initial_cells = [ // Simple oscillator
+        [1,1],
+        [2,1],
+        [3,1]
+    ];
+    let initial_state = {};
+    for (let [x, y] of initial_cells) {
+        let coordinate = new Coordinates2D(x, y);
+        initial_state[coordinate.toString()] = coordinate;
+    }
+    let game_of_life = new GameOfLife(initial_state, grid);
+    game_of_life.canvas = game_of_life_canvas;
+    game_of_life.start();
 }
 
 App();
