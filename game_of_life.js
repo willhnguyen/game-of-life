@@ -251,22 +251,6 @@ function App() {
     let game_of_life = new GameOfLife(initial_state, grid);
     game_of_life.canvas = game_of_life_canvas;
     game_of_life.start();
-
-    // // Test Canvas2D Functionality
-    // game_of_life_canvas.fill_pixel(10, 10);
-    // game_of_life_canvas.fill_from_buffer([
-    //     new Coordinates2D(1, 1),
-    //     new Coordinates2D(2, 2),
-    //     new Coordinates2D(3, 3)
-    // ]);
-
-    // // Test Canvas2D Animation
-    // let count = 0;
-    // setInterval(() => {
-    //     game_of_life_canvas.clear();
-    //     game_of_life_canvas.fill_pixel(count % grid_size, count % grid_size);
-    //     count++;
-    // }, 250);
 }
 
 App();
